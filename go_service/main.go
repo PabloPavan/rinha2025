@@ -1,17 +1,22 @@
 package main
 
 import (
-	"fmt"
+//	"fmt"
 	"log"
 	"net/http"
 )
 
+// func paymentsHandler(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method == http.MethodPost {
+// 		fmt.Fprintln(w, "OK")
+// 	} else {
+// 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+// 	}
+// }
+
 func paymentsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		fmt.Fprintln(w, "OK")
-	} else {
-		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
-	}
+	w.WriteHeader(http.StatusOK)
+	return
 }
 
 func main() {
