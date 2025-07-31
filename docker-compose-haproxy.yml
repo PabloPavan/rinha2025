@@ -1,0 +1,53 @@
+services:
+  api1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api1
+    expose:
+      - "9999"
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "50MB"
+
+  api2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api2
+    expose:
+      - "9999"
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "50MB"
+
+  haproxy:
+    image: haproxy:3.2.3-alpine3.22
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - api1
+      - api2
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: "150MB"
+
+networks:
+  backend:
+    driver: bridge
+  payment-processor:
+    external: true

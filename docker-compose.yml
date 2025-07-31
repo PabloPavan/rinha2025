@@ -1,0 +1,20 @@
+services:
+  go_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9999:9999"
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "50MB"
+
+networks:
+  backend:
+    driver: bridge
+  payment-processor:
+    external: true
