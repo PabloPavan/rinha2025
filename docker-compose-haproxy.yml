@@ -8,6 +8,7 @@ services:
       - "9999"
     networks:
       - backend
+      - payment-processor
     deploy:
       resources:
         limits:
@@ -23,6 +24,7 @@ services:
       - "9999"
     networks:
       - backend
+      - payment-processor
     deploy:
       resources:
         limits:

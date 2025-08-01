@@ -1,22 +1,35 @@
 package main
 
 import (
-//	"fmt"
+	"bytes"
+	"io"
 	"log"
 	"net/http"
+	"sync"
 )
 
-// func paymentsHandler(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method == http.MethodPost {
-// 		fmt.Fprintln(w, "OK")
-// 	} else {
-// 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
-// 	}
-// }
+var (
+	paymentsData []string
+	mu           sync.Mutex
+)
 
 func paymentsHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	return
+
+	go func() {
+		body, err := io.ReadAll(r.Body)
+
+		mu.Lock()
+		paymentsData = append(paymentsData, string(body))
+		mu.Unlock()
+
+		resp, err := http.Post("http://payment-processor-default:8080", "application/json", bytes.NewReader(body))
+		if err != nil {
+			log.Printf("Erro ao encaminhar para outro serviço: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+	}()
 }
 
 func main() {
