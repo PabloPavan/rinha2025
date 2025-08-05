@@ -8,11 +8,11 @@ services:
     networks:
       - backend
       - payment-processor
-    deploy:
-      resources:
-        limits:
-          cpus: "0.40"
-          memory: "50MB"
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "0.40"
+    #       memory: "50MB"
 
 networks:
   backend:

@@ -23,21 +23,63 @@ type Summary struct {
 }
 
 var (
-	mu               sync.RWMutex
-	summaryDefault   Summary
-	summaryFallback  Summary
-	paymentLog       []PaymentRecord
+	mu              sync.RWMutex
+	summaryDefault  Summary
+	summaryFallback Summary
+	paymentLog      []PaymentRecord
 )
 
-func paymentsHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+type Task func()
 
-	go func() {
+type Pool struct {
+	tasks chan Task
+	wg    sync.WaitGroup
+}
+
+func NewPool(numWorkers int) *Pool {
+	p := &Pool{
+		tasks: make(chan Task, 10000),
+	}
+	p.wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go p.worker()
+	}
+	return p
+}
+
+func (p *Pool) worker() {
+	defer p.wg.Done()
+	for task := range p.tasks {
+		task()
+	}
+}
+
+func (p *Pool) Submit(task Task) {
+	select {
+	case p.tasks <- task:
+		// enviado com sucesso
+	default:
+		log.Println("WARNING: pool cheio, tarefa descartada ou atrasada")
+		// ou fazer algo como: salvar em fallback, re-enfileirar depois etc
+	}
+}
+
+func (p *Pool) Wait() {
+	close(p.tasks)
+	p.wg.Wait()
+}
+
+func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(http.StatusOK)
+
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			return
 		}
-		defer r.Body.Close()
 
 		var data struct {
 			Amount float64 `json:"amount"`
@@ -46,45 +88,66 @@ func paymentsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		for {
-			target := ""
-			var ok bool
+		pool.Submit(func() {
+			// defer fmt.Println("Fim da goroutine")
+			// fmt.Println("Início da goroutine")
 
-			ok = forwardPayment("http://payment-processor-default:8080/payments", body)
-			target = "default"
+			for {
+				var target string
+				ok := false
 
-			if !ok {			
-				ok = forwardPayment("http://payment-processor-fallback:8080/payments", body)
-				target = "fallback"
-			}
-			
-			if ok {
-				log.Printf("Pagamento %.2f processado por %s", data.Amount, target)
+				if breakers["default"].Allow() {
+					ok = forwardPayment("http://payment-processor-default:8080/payments", body)
+					target = "default"
 
-				now := time.Now().UTC()
-				mu.Lock()
-				if target == "default" {
-					summaryDefault.Count++
-					summaryDefault.Amount += data.Amount
-				} else {
-					summaryFallback.Count++
-					summaryFallback.Amount += data.Amount
+					if ok {
+						breakers["default"].MarkSuccess()
+					} else {
+						breakers["default"].MarkFailure()
+					}
 				}
-				paymentLog = append(paymentLog, PaymentRecord{
-					Timestamp: now,
-					Amount:    data.Amount,
-					Target:    target,
-				})
-				mu.Unlock()
-				break // sucesso, sai do loop
+
+				if !ok && breakers["fallback"].Allow() {
+					ok = forwardPayment("http://payment-processor-fallback:8080/payments", body)
+					target = "fallback"
+
+					if ok {
+						breakers["fallback"].MarkSuccess()
+					} else {
+						breakers["fallback"].MarkFailure()
+					}
+				}
+
+				if ok {
+					now := time.Now().UTC()
+					mu.Lock()
+					if target == "default" {
+						summaryDefault.Count++
+						summaryDefault.Amount += data.Amount
+					} else {
+						summaryFallback.Count++
+						summaryFallback.Amount += data.Amount
+					}
+					paymentLog = append(paymentLog, PaymentRecord{
+						Timestamp: now,
+						Amount:    data.Amount,
+						Target:    target,
+					})
+					mu.Unlock()
+					break
+				}
+
+				time.Sleep(200 * time.Millisecond)
 			}
-			time.Sleep(100 * time.Millisecond) // evita loop agressivo
-		}
-	}()
+		})
+	}
 }
 
 func forwardPayment(url string, body []byte) bool {
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	client := &http.Client{
+		Timeout: 1 * time.Second,
+	}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("Erro ao enviar para %s: %v", url, err)
 		return false
@@ -134,6 +197,8 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	log.Printf("Data do request: to %s from %s \n", fromStr, toStr)
+
 	var defCount, fbCount int
 	var defAmt, fbAmt float64
 
@@ -142,17 +207,18 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	for _, p := range paymentLog {
 		if (fromStr == "" || !p.Timestamp.Before(from)) &&
 			(toStr == "" || !p.Timestamp.After(to)) {
-			if p.Target == "default" {
+			switch p.Target {
+			case "default":
 				defCount++
 				defAmt += p.Amount
-			} else if p.Target == "fallback" {
+			case "fallback":
 				fbCount++
 				fbAmt += p.Amount
 			}
 		}
 	}
 
-	json.NewEncoder(w).Encode(map[string]any{
+	data := map[string]any{
 		"default": map[string]any{
 			"totalRequests": defCount,
 			"totalAmount":   round(defAmt),
@@ -161,7 +227,16 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 			"totalRequests": fbCount,
 			"totalAmount":   round(fbAmt),
 		},
-	})
+	}
+
+	jsonStr, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		log.Println("Erro ao gerar JSON:", err)
+	} else {
+		log.Println("Resumo dos pagamentos:\n", string(jsonStr))
+	}
+
+	json.NewEncoder(w).Encode(data)
 }
 
 func round(val float64) float64 {
@@ -171,7 +246,15 @@ func round(val float64) float64 {
 }
 
 func main() {
-	http.HandleFunc("/payments", paymentsHandler)
+	pool := NewPool(10)
+	defer pool.Wait()
+
+	breakers := map[string]*CircuitBreaker{
+		"default":  NewCircuitBreaker(3, 10*time.Second),
+		"fallback": NewCircuitBreaker(3, 10*time.Second),
+	}
+
+	http.HandleFunc("/payments", makePaymentsHandler(pool, breakers))
 	http.HandleFunc("/payments-summary", paymentsSummaryHandler)
 	log.Println("Listening on :9999")
 	log.Fatal(http.ListenAndServe(":9999", nil))
