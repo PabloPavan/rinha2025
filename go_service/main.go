@@ -69,9 +69,14 @@ func (p *Pool) Wait() {
 	p.wg.Wait()
 }
 
-func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker) http.HandlerFunc {
+type PaymentData struct {
+	CorrelationID string  `json:"correlationId"`
+	Amount        float64 `json:"amount"`
+	RequestedAt   string  `json:"requestedAt"`
+}
+
+func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker, sharedClient *http.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
 
 		w.Header().Set("Content-Length", "0")
 		w.WriteHeader(http.StatusOK)
@@ -81,23 +86,22 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker) http.H
 			return
 		}
 
-		var data struct {
-			Amount float64 `json:"amount"`
-		}
+		r.Body.Close()
+
+		var data PaymentData
 		if err := json.Unmarshal(body, &data); err != nil {
+			log.Printf("JSON inválido")
 			return
 		}
 
 		pool.Submit(func() {
-			// defer fmt.Println("Fim da goroutine")
-			// fmt.Println("Início da goroutine")
-
 			for {
+				var resData PaymentData
 				var target string
 				ok := false
 
 				if breakers["default"].Allow() {
-					ok = forwardPayment("http://payment-processor-default:8080/payments", body)
+					ok, resData = forwardPayment("http://payment-processor-default:8080/payments", data, sharedClient)
 					target = "default"
 
 					if ok {
@@ -108,7 +112,7 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker) http.H
 				}
 
 				if !ok && breakers["fallback"].Allow() {
-					ok = forwardPayment("http://payment-processor-fallback:8080/payments", body)
+					ok, resData = forwardPayment("http://payment-processor-fallback:8080/payments", data, sharedClient)
 					target = "fallback"
 
 					if ok {
@@ -119,45 +123,56 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker) http.H
 				}
 
 				if ok {
-					now := time.Now().UTC()
 					mu.Lock()
 					if target == "default" {
 						summaryDefault.Count++
-						summaryDefault.Amount += data.Amount
+						summaryDefault.Amount += resData.Amount
 					} else {
 						summaryFallback.Count++
-						summaryFallback.Amount += data.Amount
+						summaryFallback.Amount += resData.Amount
 					}
+					RequestedAt, _ := time.Parse(time.RFC3339, resData.RequestedAt)
+
 					paymentLog = append(paymentLog, PaymentRecord{
-						Timestamp: now,
-						Amount:    data.Amount,
+						Timestamp: RequestedAt,
+						Amount:    resData.Amount,
 						Target:    target,
 					})
 					mu.Unlock()
 					break
 				}
 
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 			}
 		})
 	}
 }
 
-func forwardPayment(url string, body []byte) bool {
-	client := &http.Client{
-		Timeout: 1 * time.Second,
+func forwardPayment(url string, data PaymentData, sharedClient *http.Client) (bool, PaymentData) {
+
+	data.RequestedAt = time.Now().UTC().Format(time.RFC3339)
+
+	newBody, _ := json.Marshal(data)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(newBody))
+	if err != nil {
+		log.Printf("Erro ao criar requisição para %s: %v", url, err)
+		return false, data
 	}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := sharedClient.Do(req)
 	if err != nil {
 		log.Printf("Erro ao enviar para %s: %v", url, err)
-		return false
+		return false, data
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Serviço %s retornou status %d", url, resp.StatusCode)
-		return false
+		return false, data
 	}
-	return true
+	return true, data
 }
 
 func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
@@ -249,12 +264,23 @@ func main() {
 	pool := NewPool(10)
 	defer pool.Wait()
 
-	breakers := map[string]*CircuitBreaker{
-		"default":  NewCircuitBreaker(3, 10*time.Second),
-		"fallback": NewCircuitBreaker(3, 10*time.Second),
+	var sharedTransport = &http.Transport{
+		MaxIdleConns:       100,
+		IdleConnTimeout:    90 * time.Second,
+		DisableCompression: false,
 	}
 
-	http.HandleFunc("/payments", makePaymentsHandler(pool, breakers))
+	var sharedClient = &http.Client{
+		Timeout:   1 * time.Second,
+		Transport: sharedTransport,
+	}
+
+	breakers := map[string]*CircuitBreaker{
+		"default":  NewCircuitBreaker(3, 1*time.Second),
+		"fallback": NewCircuitBreaker(3, 1*time.Second),
+	}
+
+	http.HandleFunc("/payments", makePaymentsHandler(pool, breakers, sharedClient))
 	http.HandleFunc("/payments-summary", paymentsSummaryHandler)
 	log.Println("Listening on :9999")
 	log.Fatal(http.ListenAndServe(":9999", nil))
