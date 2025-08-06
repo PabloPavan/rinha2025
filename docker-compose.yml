@@ -8,6 +8,8 @@ services:
     networks:
       - backend
       - payment-processor
+    environment:
+      - name=go_service1
     # deploy:
     #   resources:
     #     limits:

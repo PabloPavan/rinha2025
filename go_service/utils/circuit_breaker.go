@@ -1,11 +1,11 @@
-package main
+package circuitbreaker
 
 import (
 	"sync"
 	"time"
 )
 
-type CircuitBreaker struct {
+type Breaker struct {
 	mu        sync.Mutex
 	failures  int
 	openUntil time.Time
@@ -13,21 +13,21 @@ type CircuitBreaker struct {
 	openTime  time.Duration
 }
 
-func NewCircuitBreaker(maxFails int, openTime time.Duration) *CircuitBreaker {
-	return &CircuitBreaker{
+func NewCircuitBreaker(maxFails int, openTime time.Duration) *Breaker {
+	return &Breaker{
 		maxFails: maxFails,
 		openTime: openTime,
 	}
 }
 
-func (cb *CircuitBreaker) Allow() bool {
+func (cb *Breaker) Allow() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	return !time.Now().Before(cb.openUntil)
 }
 
-func (cb *CircuitBreaker) MarkFailure() {
+func (cb *Breaker) MarkFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -38,7 +38,7 @@ func (cb *CircuitBreaker) MarkFailure() {
 	}
 }
 
-func (cb *CircuitBreaker) MarkSuccess() {
+func (cb *Breaker) MarkSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 

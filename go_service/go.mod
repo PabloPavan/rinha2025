@@ -1,3 +1,3 @@
-module rinha
+module github.com/PabloPavan/rinha2025
 
-go 1.21.13
+go 1.22.2

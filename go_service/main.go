@@ -6,9 +6,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	circuitbreaker "github.com/PabloPavan/rinha2025/utils"
 )
 
 type PaymentRecord struct {
@@ -27,6 +32,7 @@ var (
 	summaryDefault  Summary
 	summaryFallback Summary
 	paymentLog      []PaymentRecord
+	count           int
 )
 
 type Task func()
@@ -75,7 +81,7 @@ type PaymentData struct {
 	RequestedAt   string  `json:"requestedAt"`
 }
 
-func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker, sharedClient *http.Client) http.HandlerFunc {
+func makePaymentsHandler(pool *Pool, breakers map[string]*circuitbreaker.Breaker, sharedClient *http.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Length", "0")
@@ -93,6 +99,8 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker, shared
 			log.Printf("JSON inválido")
 			return
 		}
+
+		data.RequestedAt = time.Now().UTC().Format(time.RFC3339)
 
 		pool.Submit(func() {
 			for {
@@ -124,6 +132,7 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker, shared
 
 				if ok {
 					mu.Lock()
+					count += 1
 					if target == "default" {
 						summaryDefault.Count++
 						summaryDefault.Amount += resData.Amount
@@ -142,15 +151,13 @@ func makePaymentsHandler(pool *Pool, breakers map[string]*CircuitBreaker, shared
 					break
 				}
 
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(1 * time.Millisecond)
 			}
 		})
 	}
 }
 
 func forwardPayment(url string, data PaymentData, sharedClient *http.Client) (bool, PaymentData) {
-
-	data.RequestedAt = time.Now().UTC().Format(time.RFC3339)
 
 	newBody, _ := json.Marshal(data)
 
@@ -212,16 +219,32 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("Data do request: to %s from %s \n", fromStr, toStr)
+	log.Printf("Data do request: from %s to %s \n", fromStr, toStr)
+
+	log.Println("Contador Summary...:", count)
 
 	var defCount, fbCount int
 	var defAmt, fbAmt float64
 
 	mu.RLock()
 	defer mu.RUnlock()
-	for _, p := range paymentLog {
+
+	x1 := -1
+	x2 := 0
+
+	sort.Slice(paymentLog, func(i, j int) bool {
+		return paymentLog[i].Timestamp.Before(paymentLog[j].Timestamp)
+	})
+
+	for i, p := range paymentLog {
 		if (fromStr == "" || !p.Timestamp.Before(from)) &&
 			(toStr == "" || !p.Timestamp.After(to)) {
+
+			if x1 < 0 {
+				x1 = i
+			}
+
+			x2 += 1
 			switch p.Target {
 			case "default":
 				defCount++
@@ -232,6 +255,8 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	log.Println("x1 =", x1, " x2 =", x2, " count=", len(paymentLog))
 
 	data := map[string]any{
 		"default": map[string]any{
@@ -252,6 +277,11 @@ func paymentsSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(data)
+
+	log.Println("default  totalRequests= ", summaryDefault.Count,
+		"totalAmount= ", round(summaryDefault.Amount),
+		"fallback totalRequests= ", summaryFallback.Count,
+		"totalAmount= ", round(summaryFallback.Amount))
 }
 
 func round(val float64) float64 {
@@ -260,9 +290,29 @@ func round(val float64) float64 {
 	return r
 }
 
+func print() {
+	for {
+		log.Println("Contador Loop...:", count)
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func main() {
 	pool := NewPool(10)
 	defer pool.Wait()
+
+	go print()
+
+	for _, env := range os.Environ() {
+		// Cada entrada é no formato "KEY=VALUE"
+		parts := strings.SplitN(env, "=", 2)
+		key := parts[0]
+		value := ""
+		if len(parts) > 1 {
+			value = parts[1]
+		}
+		log.Printf("%s=%s\n", key, value)
+	}
 
 	var sharedTransport = &http.Transport{
 		MaxIdleConns:       100,
@@ -275,9 +325,9 @@ func main() {
 		Transport: sharedTransport,
 	}
 
-	breakers := map[string]*CircuitBreaker{
-		"default":  NewCircuitBreaker(3, 1*time.Second),
-		"fallback": NewCircuitBreaker(3, 1*time.Second),
+	breakers := map[string]*circuitbreaker.Breaker{
+		"default":  circuitbreaker.NewCircuitBreaker(3, 1*time.Second),
+		"fallback": circuitbreaker.NewCircuitBreaker(3, 1*time.Second),
 	}
 
 	http.HandleFunc("/payments", makePaymentsHandler(pool, breakers, sharedClient))
