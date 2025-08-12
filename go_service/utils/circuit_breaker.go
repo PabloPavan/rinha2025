@@ -20,28 +20,43 @@ func NewCircuitBreaker(maxFails int, openTime time.Duration) *Breaker {
 	}
 }
 
-func (cb *Breaker) Allow() bool {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+func (b *Breaker) Allow() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-	return !time.Now().Before(cb.openUntil)
+	return !time.Now().Before(b.openUntil)
 }
 
-func (cb *Breaker) MarkFailure() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+func (b *Breaker) MarkFailure() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-	cb.failures++
-	if cb.failures >= cb.maxFails {
-		cb.openUntil = time.Now().Add(cb.openTime)
-		cb.failures = 0
+	b.failures++
+	if b.failures >= b.maxFails {
+		b.openUntil = time.Now().Add(b.openTime)
+		b.failures = 0
 	}
 }
 
-func (cb *Breaker) MarkSuccess() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+func (b *Breaker) MarkSuccess() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
-	cb.failures = 0
-	cb.openUntil = time.Time{}
+	b.failures = 0
+	b.openUntil = time.Time{}
+}
+
+func (b *Breaker) RemainingOpen() time.Duration {
+	b.mu.Lock()
+	until := b.openUntil
+	b.mu.Unlock()
+
+	if until.IsZero() {
+		return 0
+	}
+	d := time.Until(until)
+	if d < 0 {
+		return 0
+	}
+	return d
 }
