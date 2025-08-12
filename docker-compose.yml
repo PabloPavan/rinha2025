@@ -17,6 +17,7 @@ services:
       PPROF_ADDR: 0.0.0.0:6060
       GOMAXPROCS: 1 
       WORKERS: 2
+      POOLSIZE: 2000
     deploy:
       resources:
         limits:
