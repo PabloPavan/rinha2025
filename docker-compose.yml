@@ -9,7 +9,9 @@ services:
       - backend
       - payment-processor
     environment:
-      - name=go_service1
+      NAME : go_service1
+      PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
+      PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
     # deploy:
     #   resources:
     #     limits:

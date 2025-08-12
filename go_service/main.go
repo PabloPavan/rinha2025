@@ -32,7 +32,12 @@ func main() {
 		payments.TargetFallback: utils.NewCircuitBreaker(1, 1*time.Second),
 	}
 
-	paymentService := payments.NewService(sharedClient, breakers)
+	paymentServers := &payments.PaymentServers{
+		UrlDefault:  utils.GetEnvOrDefault("PAYMENT_URL_DEFAULT", "http://payment-processor-default:8080/payments"),
+		UrlFallBack: utils.GetEnvOrDefault("PAYMENT_URL_FALLBACK", "http://payment-processor-fallback:8080/payments"),
+	}
+
+	paymentService := payments.NewService(sharedClient, breakers, paymentServers)
 
 	appServer := server.NewServer(pool, paymentService, sharedClient)
 

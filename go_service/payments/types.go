@@ -12,6 +12,11 @@ const (
 	TargetUnknown
 )
 
+type PaymentServers struct {
+	UrlDefault  string
+	UrlFallBack string
+}
+
 type PaymentRecord struct {
 	Timestamp time.Time
 	Amount    float64

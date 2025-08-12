@@ -13,12 +13,14 @@ import (
 
 type Service struct {
 	client   *http.Client
+	servers  *PaymentServers
 	breakers map[PaymentTarget]*utils.Breaker
 }
 
-func NewService(client *http.Client, breakers map[PaymentTarget]*utils.Breaker) *Service {
+func NewService(client *http.Client, breakers map[PaymentTarget]*utils.Breaker, servers *PaymentServers) *Service {
 	return &Service{
 		client:   client,
+		servers:  servers,
 		breakers: breakers,
 	}
 }
@@ -30,7 +32,7 @@ func (s *Service) ProcessPayment(data PaymentData) (PaymentRecord, bool) {
 		ok := false
 
 		if s.breakers[TargetDefault].Allow() {
-			ok, resData = forwardPayment("http://payment-processor-default:8080/payments", data, s.client)
+			ok, resData = forwardPayment(s.servers.UrlDefault, data, s.client)
 			target = TargetDefault
 
 			if ok {
@@ -41,7 +43,7 @@ func (s *Service) ProcessPayment(data PaymentData) (PaymentRecord, bool) {
 		}
 
 		if !ok && s.breakers[TargetFallback].Allow() {
-			ok, resData = forwardPayment("http://payment-processor-fallback:8080/payments", data, s.client)
+			ok, resData = forwardPayment(s.servers.UrlFallBack, data, s.client)
 			target = TargetFallback
 
 			if ok {
@@ -65,7 +67,7 @@ func (s *Service) ProcessPayment(data PaymentData) (PaymentRecord, bool) {
 			s.breakers[TargetFallback].RemainingOpen())
 
 		if sleep == 0 {
-			sleep = 10 * time.Millisecond
+			sleep = 1 * time.Millisecond
 		}
 		time.Sleep(sleep)
 	}
