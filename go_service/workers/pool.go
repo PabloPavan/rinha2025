@@ -3,6 +3,8 @@ package workers
 import (
 	"log"
 	"sync"
+
+	utils "github.com/PabloPavan/rinha2025/utils"
 )
 
 type Task func()
@@ -14,7 +16,7 @@ type Pool struct {
 
 func NewPool(numWorkers int) *Pool {
 	p := &Pool{
-		tasks: make(chan Task, 10000),
+		tasks: make(chan Task, utils.GetEnvInt("POOLSIZE", 10000)),
 	}
 	p.wg.Add(numWorkers)
 	for range numWorkers {

@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "9999:9999"
+      - "6060:6060"
     networks:
       - backend
       - payment-processor
@@ -12,11 +13,15 @@ services:
       NAME : go_service1
       PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: "0.40"
-    #       memory: "50MB"
+      PPROF_ENABLE: 0
+      PPROF_ADDR: 0.0.0.0:6060
+      GOMAXPROCS: 1 
+      WORKERS: 2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.60"
+          memory: "125MB"
 
 networks:
   backend:

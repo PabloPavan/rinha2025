@@ -5,21 +5,44 @@ import (
 	"net/http"
 	"time"
 
+	_ "net/http/pprof"
+	"os"
+
 	payments "github.com/PabloPavan/rinha2025/payments"
 	server "github.com/PabloPavan/rinha2025/server"
 	utils "github.com/PabloPavan/rinha2025/utils"
 	workers "github.com/PabloPavan/rinha2025/workers"
 )
 
-func main() {
+func enablePprof() {
+	// Habilita pprof se PPROF_ENABLE=1
+	if os.Getenv("PPROF_ENABLE") != "1" {
+		return
+	}
 
-	pool := workers.NewPool(10)
+	addr := utils.GetEnvOrDefault("PPROF_ADDR", "0.0.0.0:6060")
+
+	go func() {
+		log.Printf("[pprof] escutando em %s (PPROF_ENABLE=1)\n", addr)
+		// DefaultServeMux já tem os handlers do pprof
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Printf("[pprof] erro: %v\n", err)
+		}
+	}()
+}
+
+func main() {
+	enablePprof()
+
+	pool := workers.NewPool(utils.GetEnvInt("WORKERS", 2))
 	defer pool.Wait()
 
 	sharedTransport := &http.Transport{
-		MaxIdleConns:       100,
-		IdleConnTimeout:    90 * time.Second,
-		DisableCompression: false,
+		MaxConnsPerHost:     4,
+		MaxIdleConnsPerHost: 4,
+		MaxIdleConns:        16,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
 	}
 
 	sharedClient := &http.Client{

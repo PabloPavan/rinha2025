@@ -65,7 +65,6 @@ func (s *Server) PaymentsSummaryHandler(w http.ResponseWriter, r *http.Request) 
 	var defAmt, fbAmt float64
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, p := range s.paymentLog {
 		if (fromStr == "" || !p.Timestamp.Before(from)) &&
 			(toStr == "" || !p.Timestamp.After(to)) {
@@ -79,6 +78,7 @@ func (s *Server) PaymentsSummaryHandler(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	s.mu.Unlock()
 
 	resp := payments.PaymentsSummaryResponse{
 		Default:  payments.SummaryDTO{TotalRequests: defCount, TotalAmount: defAmt},
