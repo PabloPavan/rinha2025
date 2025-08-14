@@ -15,14 +15,14 @@ services:
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
       PPROF_ENABLE: 0
       PPROF_ADDR: 0.0.0.0:6060
-      GOMAXPROCS: 1 
-      WORKERS: 2
-      POOLSIZE: 2000
-    deploy:
-      resources:
-        limits:
-          cpus: "0.60"
-          memory: "125MB"
+      # GOMAXPROCS: 1 
+      WORKERS: 4
+      POOLSIZE: 5000
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "0.60"
+    #       memory: "125MB"
 
 networks:
   backend:

@@ -10,14 +10,14 @@ services:
       - backend
       - payment-processor
     environment:
-      NAME : go_service1
+      NAME : master
       PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
       PPROF_ENABLE: 0
       PPROF_ADDR: 0.0.0.0:6060
       GOMAXPROCS: 1 
-      WORKERS: 2
-      POOLSIZE: 2000
+      WORKERS: 4
+      POOLSIZE: 5000
     deploy:
       resources:
         limits:
@@ -35,14 +35,14 @@ services:
       - backend
       - payment-processor
     environment:
-      NAME : go_service2
+      NAME : slave
       PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
       PPROF_ENABLE: 0
       PPROF_ADDR: 0.0.0.0:6060
       GOMAXPROCS: 1 
-      WORKERS: 2
-      POOLSIZE: 2000
+      WORKERS: 4
+      POOLSIZE: 5000
     deploy:
       resources:
         limits:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -32,17 +33,29 @@ func enablePprof() {
 }
 
 func main() {
-	enablePprof()
+	//enablePprof()
 
 	pool := workers.NewPool(utils.GetEnvInt("WORKERS", 2))
 	defer pool.Wait()
 
+	dialer := &net.Dialer{
+		Timeout:   800 * time.Millisecond,
+		KeepAlive: 30 * time.Second,
+	}
+
 	sharedTransport := &http.Transport{
-		MaxConnsPerHost:     4,
-		MaxIdleConnsPerHost: 4,
-		MaxIdleConns:        16,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  false,
+		DialContext:       dialer.DialContext,
+		ForceAttemptHTTP2: false,
+
+		MaxConnsPerHost:     32,
+		MaxIdleConns:        64,
+		MaxIdleConnsPerHost: 16,
+		IdleConnTimeout:     30 * time.Second,
+
+		TLSHandshakeTimeout:   2 * time.Second,
+		ExpectContinueTimeout: 0,
+		ResponseHeaderTimeout: 2 * time.Second,
+		DisableCompression:    true,
 	}
 
 	sharedClient := &http.Client{
@@ -61,8 +74,9 @@ func main() {
 	}
 
 	paymentService := payments.NewService(sharedClient, breakers, paymentServers)
+	myName := utils.GetEnvOrDefault("NAME", "")
 
-	appServer := server.NewServer(pool, paymentService, sharedClient)
+	appServer := server.NewServer(pool, paymentService, sharedClient, myName)
 
 	http.HandleFunc("/payments", appServer.PaymentsHandler)
 	http.HandleFunc("/payments-summary", appServer.PaymentsSummaryHandler)
