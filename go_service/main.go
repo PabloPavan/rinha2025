@@ -2,12 +2,11 @@ package main
 
 import (
 	"log"
-	"net"
 	"net/http"
 	"time"
 
-	_ "net/http/pprof"
-	"os"
+	// _ "net/http/pprof"
+	// "os"
 
 	payments "github.com/PabloPavan/rinha2025/payments"
 	server "github.com/PabloPavan/rinha2025/server"
@@ -15,22 +14,22 @@ import (
 	workers "github.com/PabloPavan/rinha2025/workers"
 )
 
-func enablePprof() {
-	// Habilita pprof se PPROF_ENABLE=1
-	if os.Getenv("PPROF_ENABLE") != "1" {
-		return
-	}
+// func enablePprof() {
+// 	// Habilita pprof se PPROF_ENABLE=1
+// 	if os.Getenv("PPROF_ENABLE") != "1" {
+// 		return
+// 	}
 
-	addr := utils.GetEnvOrDefault("PPROF_ADDR", "0.0.0.0:6060")
+// 	addr := utils.GetEnvOrDefault("PPROF_ADDR", "0.0.0.0:6060")
 
-	go func() {
-		log.Printf("[pprof] escutando em %s (PPROF_ENABLE=1)\n", addr)
-		// DefaultServeMux já tem os handlers do pprof
-		if err := http.ListenAndServe(addr, nil); err != nil {
-			log.Printf("[pprof] erro: %v\n", err)
-		}
-	}()
-}
+// 	go func() {
+// 		log.Printf("[pprof] escutando em %s (PPROF_ENABLE=1)\n", addr)
+// 		// DefaultServeMux já tem os handlers do pprof
+// 		if err := http.ListenAndServe(addr, nil); err != nil {
+// 			log.Printf("[pprof] erro: %v\n", err)
+// 		}
+// 	}()
+// }
 
 func main() {
 	//enablePprof()
@@ -38,13 +37,13 @@ func main() {
 	pool := workers.NewPool(utils.GetEnvInt("WORKERS", 2))
 	defer pool.Wait()
 
-	dialer := &net.Dialer{
-		Timeout:   800 * time.Millisecond,
-		KeepAlive: 30 * time.Second,
-	}
+	// dialer := &net.Dialer{
+	// 	Timeout:   800 * time.Millisecond,
+	// 	KeepAlive: 30 * time.Second,
+	// }
 
 	sharedTransport := &http.Transport{
-		DialContext:       dialer.DialContext,
+		//	DialContext:       dialer.DialContext,
 		ForceAttemptHTTP2: false,
 
 		MaxConnsPerHost:     32,

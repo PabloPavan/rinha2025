@@ -36,7 +36,7 @@ services:
       - payment-processor
     environment:
       NAME : slave
-      PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
+      PAYMENT_URL_DEFAULT: "localhost:8001/payments"
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
       PPROF_ENABLE: 0
       PPROF_ADDR: 0.0.0.0:6060

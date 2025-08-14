@@ -18,7 +18,7 @@ services:
       # GOMAXPROCS: 1 
       WORKERS: 4
       POOLSIZE: 5000
-    # deploy:
+    # deploy:                  
     #   resources:
     #     limits:
     #       cpus: "0.60"

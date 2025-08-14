@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -33,6 +32,7 @@ func (s *Server) PaymentsHandler(w http.ResponseWriter, r *http.Request) {
 
 		if ok {
 			s.mu.Lock()
+			//log.Println("Salvando")
 			s.paymentLog = append(s.paymentLog, record)
 			s.mu.Unlock()
 		}
@@ -86,38 +86,43 @@ func (s *Server) PaymentsSummaryHandler(w http.ResponseWriter, r *http.Request) 
 		Fallback: payments.SummaryDTO{TotalRequests: fbCount, TotalAmount: fbAmt},
 	}
 
-	// Se for master, busca no slave e agrega
-	if s.name == "master" {
-		log.Println("Sou o master enviando")
+	log.Printf("%s Data do request: to %s from %s \n", s.name, fromStr, toStr)
+	log.Println(s.name, " default totalRequests=", agg.Default.TotalRequests,
+		"totalAmount=", agg.Default.TotalAmount,
+		"fallback totalRequests=", agg.Fallback.TotalRequests,
+		"totalAmount=", agg.Fallback.TotalAmount)
 
-		ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
-		defer cancel()
+	// if s.name == "master" {
+	// 	ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+	// 	defer cancel()
 
-		target := "http://api2:9999/payments-summary"
-		if q := r.URL.RawQuery; q != "" {
-			target += "?" + q
-		}
+	// 	target := "http://api2:9999/payments-summary"
+	// 	if q := r.URL.RawQuery; q != "" {
+	// 		target += "?" + q
+	// 	}
 
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-		resp, err := s.sharedClient.Do(req)
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				var slaveResp payments.PaymentsSummaryResponse
-				if json.NewDecoder(resp.Body).Decode(&slaveResp) == nil {
-					agg.Default.TotalRequests += slaveResp.Default.TotalRequests
-					agg.Default.TotalAmount += slaveResp.Default.TotalAmount
-					agg.Fallback.TotalRequests += slaveResp.Fallback.TotalRequests
-					agg.Fallback.TotalAmount += slaveResp.Fallback.TotalAmount
-				}
-			} else {
-				log.Println("Erro na resposta do slave")
-			}
+	// 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	// 	resp, err := s.sharedClient.Do(req)
+	// 	if err == nil {
+	// 		defer resp.Body.Close()
+	// 		if resp.StatusCode == http.StatusOK {
+	// 			var slaveResp payments.PaymentsSummaryResponse
+	// 			if json.NewDecoder(resp.Body).Decode(&slaveResp) == nil {
+	// 				agg.Default.TotalRequests += slaveResp.Default.TotalRequests
+	// 				agg.Default.TotalAmount += slaveResp.Default.TotalAmount
+	// 				agg.Fallback.TotalRequests += slaveResp.Fallback.TotalRequests
+	// 				agg.Fallback.TotalAmount += slaveResp.Fallback.TotalAmount
+	// 			}
 
-		}
-	} else {
-		log.Println("Sou o slave")
-	}
+	// 			log.Println("final default totalRequests=", agg.Default.TotalRequests,
+	// 				"totalAmount=", agg.Default.TotalAmount,
+	// 				"fallback totalRequests=", agg.Fallback.TotalRequests,
+	// 				"totalAmount=", agg.Fallback.TotalAmount)
+	// 		} else {
+	// 			log.Println("Erro na resposta do slave")
+	// 		}
+	// 	}
+	// }
 
 	if err := json.NewEncoder(w).Encode(agg); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
