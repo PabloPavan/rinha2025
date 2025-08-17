@@ -4,7 +4,7 @@ Submissão para a [Rinha de Backend 2025](https://github.com/rinhahub/rinha-de-b
 
 ## 🚀 Tecnologias Utilizadas
 
-- **Linguagens**: Go lang
+- **Linguagens**: Go
 - **Load Balancer** - Haproxy
 
 ## 🏗️ Arquitetura
