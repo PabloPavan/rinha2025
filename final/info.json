@@ -1,0 +1,9 @@
+{
+    "name": "Pablo Pavan",
+    "social": ["https://www.linkedin.com/in/pablopavan/"],
+    "source-code-repo": "https://github.com/PabloPavan/rinha2025",
+    "langs": ["go"],
+    "storages": [""],
+    "messaging": [""],
+    "load-balancers": ["haproxy"]
+}
