@@ -3,7 +3,7 @@ package payments
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+//	"log"
 	"math"
 	"net/http"
 	"time"
@@ -74,30 +74,30 @@ func (s *Service) ProcessPayment(data PaymentData) (PaymentRecord, bool) {
 }
 
 func forwardPayment(url string, data PaymentData, client *http.Client) (bool, PaymentData) {
-	data.RequestedAt = time.Now().UTC().Format(time.RFC3339)
+	data.RequestedAt = time.Now().UTC().Format(time.RFC3339Nano)
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(data); err != nil {
-		log.Printf("Erro ao serializar JSON: %v", err)
+	//	log.Printf("Erro ao serializar JSON: %v", err)
 		return false, data
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, &buf)
 	if err != nil {
-		log.Printf("Erro ao criar requisição para %s: %v", url, err)
+	//	log.Printf("Erro ao criar requisição para %s: %v", url, err)
 		return false, data
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Erro ao enviar para %s: %v", url, err)
+	//	log.Printf("Erro ao enviar para %s: %v", url, err)
 		return false, data
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Serviço %s retornou status %d", url, resp.StatusCode)
+	//	log.Printf("Serviço %s retornou status %d", url, resp.StatusCode)
 		return false, data
 	}
 

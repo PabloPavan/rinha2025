@@ -18,6 +18,11 @@ services:
       GOMAXPROCS: 1 
       WORKERS: 4
       POOLSIZE: 5000
+    ulimits:
+      nproc: 1000000
+      nofile:
+        soft: 1000000
+        hard: 1000000
     deploy:
       resources:
         limits:
@@ -36,13 +41,18 @@ services:
       - payment-processor
     environment:
       NAME : slave
-      PAYMENT_URL_DEFAULT: "localhost:8001/payments"
+      PAYMENT_URL_DEFAULT: "http://payment-processor-default:8080/payments"
       PAYMENT_URL_FALLBACK: "http://payment-processor-fallback:8080/payments"
       PPROF_ENABLE: 0
       PPROF_ADDR: 0.0.0.0:6060
       GOMAXPROCS: 1 
       WORKERS: 4
       POOLSIZE: 5000
+    ulimits:
+      nproc: 1000000
+      nofile:
+        soft: 1000000
+        hard: 1000000
     deploy:
       resources:
         limits:
